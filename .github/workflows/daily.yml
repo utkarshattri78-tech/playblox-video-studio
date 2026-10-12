@@ -1,0 +1,12 @@
+
+name: PlayBlox Studio - Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Welcome
+        run: echo "PlayBlox Studio is working!"
