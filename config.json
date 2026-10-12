@@ -1,0 +1,12 @@
+{
+  "channelName": "PlayBlox Gaming",
+  "videoCategory": "Gaming",
+  "resolution": "1920x1080",
+  "videoLanguage": "English",
+  "targetDurationMinutes": 6,
+  "shortsPerVideo": 3,
+  "generateTitles": true,
+  "generateDescriptions": true,
+  "generateThumbnails": true,
+  "autoUpload": false
+}
