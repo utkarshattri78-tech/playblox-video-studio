@@ -1,12 +1,40 @@
-
-name: PlayBlox Studio - Test
+name: PlayBlox Studio - Video Generator
 
 on:
   workflow_dispatch:
+    inputs:
+      topic:
+        description: "Gaming video topic"
+        required: true
+        default: "Minecraft survival adventure"
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  generate-video:
     runs-on: ubuntu-latest
     steps:
-      - name: Welcome
-        run: echo "PlayBlox Studio is working!"
+      - name: Get project files
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Generate video
+        run: |
+          python generate.py "${{ github.event.inputs.topic }}" 
+
+      - name: Save generated video
+        uses: actions/upload-artifact@v4
+        with:
+          name: playblox-video
+          path: output/
+          if-no-files-found: error
