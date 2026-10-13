@@ -30,7 +30,7 @@ def create_video(topic):
     )
 
     narration = output / "narration.mp3"
-    VOICE = "en-US-GuyNeural"
+    make_narration(" ".join(script), narration)
 
     video = output / "playblox_video.mp4"
 
