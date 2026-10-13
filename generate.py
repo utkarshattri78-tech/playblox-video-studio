@@ -1,10 +1,10 @@
+
 import subprocess
 import sys
 from pathlib import Path
 from gtts import gTTS
 
-WIDTH, HEIGHT, FPS, DURATION = 1920, 1080, 30, 30
-VOICE = "en-US-GuyNeural"
+WIDTH, HEIGHT, FPS = 1920, 1080, 30
 
 def run(command):
     subprocess.run(command, check=True)
@@ -16,6 +16,9 @@ def make_narration(text, output_file):
 def create_video(topic):
     output = Path("output")
     output.mkdir(exist_ok=True)
+
+    assets = Path("assets")
+    gameplay = assets / "gameplay.mp4"
 
     script = [
         "Yo, what's up, everyone? Welcome back to PlayBlox Gaming!",
@@ -34,26 +37,47 @@ def create_video(topic):
 
     video = output / "playblox_video.mp4"
 
-    visual_filter = (
-        "drawbox=x=0:y=ih/2-6:w=iw:h=12:color=0x00d9ff@0.8:t=fill,"
-        "drawtext=text='PLAYBLOX GAMING':fontcolor=white:fontsize=90:"
-        "x=(w-text_w)/2:y=h*0.25,"
-        "drawtext=text='GAMING ADVENTURE':fontcolor=0x00d9ff:fontsize=48:"
-        "x=(w-text_w)/2:y=h*0.43,"
-        "drawtext=text='LETS GO!':fontcolor=yellow:fontsize=60:"
-        "x=(w-text_w)/2:y=h*0.72"
-    )
+    if gameplay.exists():
+        video_input = ["-stream_loop", "-1", "-i", str(gameplay)]
+        visual_filter = (
+            "scale=1920:1080:force_original_aspect_ratio=increase,"
+            "crop=1920:1080,"
+            "drawtext=text='PLAYBLOX GAMING':"
+            "fontcolor=white:fontsize=54:"
+            "x=40:y=40:box=1:boxcolor=black@0.5"
+        )
+    else:
+        print("No assets/gameplay.mp4 found; creating title-screen fallback.")
+        video_input = [
+            "-f", "lavfi", "-i",
+            "color=c=0x10152b:s=1920x1080:r=30:d=60"
+        ]
+        visual_filter = (
+            "drawtext=text='PLAYBLOX GAMING':"
+            "fontcolor=white:fontsize=90:"
+            "x=(w-text_w)/2:y=h*0.25,"
+            "drawtext=text='MINECRAFT ADVENTURE':"
+            "fontcolor=0x00d9ff:fontsize=48:"
+            "x=(w-text_w)/2:y=h*0.43,"
+            "drawtext=text='LETS GO!':"
+            "fontcolor=yellow:fontsize=60:"
+            "x=(w-text_w)/2:y=h*0.72"
+        )
 
     run([
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i",
-        f"color=c=0x10152b:s={WIDTH}x{HEIGHT}:r={FPS}:d={DURATION}",
+        *video_input,
         "-i", str(narration),
         "-vf", visual_filter,
-        "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k",
-        "-shortest", "-movflags", "+faststart",
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        "-movflags", "+faststart",
         str(video)
     ])
 
