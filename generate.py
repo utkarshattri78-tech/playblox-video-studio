@@ -1,9 +1,17 @@
 
+import json
+import os
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 30
+OUTPUT = Path("output")
+HF_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
+HF_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}"
 
 
 def run(command):
@@ -21,149 +29,186 @@ def make_narration(script_file, output_file):
     ])
 
 
+def generate_image(prompt, destination, token):
+    payload = json.dumps({
+        "inputs": prompt,
+        "parameters": {
+            "width": 1024,
+            "height": 1024
+        }
+    }).encode("utf-8")
+
+    request = urllib.request.Request(
+        HF_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "image/png",
+        },
+        method="POST",
+    )
+
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                image_data = response.read()
+
+            if not image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise RuntimeError(
+                    "The image service did not return a PNG image."
+                )
+
+            destination.write_bytes(image_data)
+            print(f"Created cartoon scene: {destination.name}")
+            return
+
+        except urllib.error.HTTPError as error:
+            details = error.read().decode("utf-8", errors="replace")
+            if error.code == 503 and attempt < 2:
+                print("The model is loading. Waiting before retrying...")
+                time.sleep(20)
+                continue
+
+            raise RuntimeError(
+                f"Hugging Face image generation failed (HTTP {error.code}). "
+                "The model may be unavailable or your free allowance may "
+                "be exhausted. No paid fallback will be used. "
+                f"Service message: {details[:500]}"
+            ) from None
+
+        except urllib.error.URLError as error:
+            raise RuntimeError(
+                f"Could not connect to the image service: {error.reason}"
+            ) from None
+
+
 def create_video(topic):
-    output = Path("output")
-    output.mkdir(exist_ok=True)
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "HF_TOKEN is missing. Check your GitHub Actions repository secret."
+        )
 
-    # Original gaming-adventure narration.
-    script = [
-        "Yo, what's up, PlayBlox squad! Welcome back! "
-        "Today, we're starting a brand-new gaming adventure. "
-        "Our mission is simple: explore, improve, overcome "
-        "challenges, and see how far we can go. Stick around, "
-        "because things are about to get interesting.",
+    OUTPUT.mkdir(exist_ok=True)
 
-        f"Today's adventure is all about {topic}. "
-        "Every great gaming journey starts somewhere. "
-        "At first, everything looks easy. You have time to "
-        "explore, learn the controls, and figure out your plan. "
-        "But the real challenge begins when you start setting "
-        "bigger goals. We aren't here just to stand around. "
-        "We're here to make progress and create an adventure "
-        "worth watching.",
-
-        "First, we need a plan. Every second matters when "
-        "you're trying to build something impressive. We need "
-        "to look around, choose our next objective, and avoid "
-        "wasting time. Sometimes the smartest move is to take "
-        "things slowly. Other times, you need to take a risk "
-        "and see what happens. That's what makes gaming fun. "
-        "You never know exactly how the next moment will turn out.",
-
-        "Now the mission is getting serious. Imagine finding "
-        "something rare just when you thought the adventure "
-        "couldn't get any better. Suddenly, the plan changes. "
-        "Do you keep exploring, or do you protect what you've "
-        "already achieved? This is where patience and quick "
-        "decisions make a difference. One mistake can cost time, "
-        "but one smart decision can completely change the run.",
-
-        "Here comes another challenge. Things don't always go "
-        "according to plan, and that's completely normal. "
-        "Sometimes you have to start again, try a different "
-        "strategy, or learn from a mistake. The important thing "
-        "is not giving up after the first problem. Every attempt "
-        "teaches you something new. That's how you improve, "
-        "and that's how an ordinary gaming session can turn "
-        "into an amazing story.",
-
-        "Let's raise the difficulty. Our next goal is to make "
-        "real progress instead of repeating the same easy steps. "
-        "We need to think ahead, use our resources carefully, "
-        "and decide which objective matters most. If everything "
-        "works out, we'll be in a much stronger position by the "
-        "end. But if something goes wrong, we'll have to adapt. "
-        "Either way, we're keeping the adventure moving.",
-
-        "We're getting closer to the final challenge. Think about "
-        "how much we've learned since the beginning. We started "
-        "with a simple idea, made a plan, faced obstacles, and "
-        "kept moving forward. Now it's time to put that progress "
-        "to the test. This is the moment to stay focused and "
-        "finish strong. The goal isn't just to play; it's to "
-        "make every part of the journey count.",
-
-        "And that's the spirit of PlayBlox Gaming! Every adventure "
-        "gives us another chance to explore, improve, and try "
-        "something new. Tell me in the comments what game we "
-        "should tackle next and what challenge you'd like to see. "
-        "If you enjoyed this adventure, subscribe to PlayBlox "
-        "Gaming and join the squad. Thanks for watching, and "
-        "I'll see you in the next video. Peace!"
+    story = [
+        (
+            f"Imagine a world where {topic}. At first, everything seems "
+            "ordinary, but one surprising discovery changes the day. "
+            "Our story begins in a colourful world full of curious "
+            "characters, strange places, and unexpected possibilities."
+        ),
+        (
+            "As the adventure continues, our hero discovers something "
+            "nobody expected. A mysterious clue points toward a bigger "
+            "secret. There are questions everywhere, and every new "
+            "discovery makes the mystery more exciting."
+        ),
+        (
+            "Suddenly, a difficult problem appears. The easy option "
+            "doesn't work, so our hero has to think differently. "
+            "With a little creativity, courage, and help from an "
+            "unexpected friend, a clever new plan begins to take shape."
+        ),
+        (
+            "At last, the pieces come together. The journey reveals "
+            "a surprising lesson: curiosity can lead us to amazing "
+            "places. But this story might not be over. What do you "
+            "think should happen next? Share your idea, and join us "
+            "for another colourful adventure."
+        ),
     ]
 
-    script_file = output / "script.txt"
-    script_file.write_text(
-        "\n\n".join(script), encoding="utf-8"
-    )
+    prompts = [
+        (
+            f"A beautiful original 3D animated family-friendly cartoon "
+            f"scene about {topic}, a curious young cartoon explorer "
+            "discovering a magical colourful world, expressive character, "
+            "cinematic lighting, vibrant colours, polished animated movie "
+            "look, detailed environment, wide establishing shot, "
+            "no text, no letters, landscape composition"
+        ),
+        (
+            f"An original family-friendly 3D cartoon scene about {topic}, "
+            "the same young cartoon explorer finding a mysterious glowing "
+            "clue in a whimsical colourful landscape, expressive face, "
+            "cinematic lighting, vibrant animated movie style, detailed "
+            "background, no text, no letters, landscape composition"
+        ),
+        (
+            f"An original family-friendly 3D animated cartoon scene about "
+            f"{topic}, the same young explorer solving a surprising "
+            "challenge with a friendly unusual creature, dynamic poses, "
+            "colourful imaginative environment, cinematic animated movie "
+            "style, no text, no letters, landscape composition"
+        ),
+        (
+            f"An original family-friendly 3D cartoon finale about {topic}, "
+            "the same young explorer celebrating a wonderful discovery "
+            "in a magical colourful world at sunset, joyful expression, "
+            "beautiful cinematic lighting, polished animated movie look, "
+            "no text, no letters, landscape composition"
+        ),
+    ]
 
-    narration = output / "narration.wav"
+    script_file = OUTPUT / "script.txt"
+    script_file.write_text("\n\n".join(story), encoding="utf-8")
+
+    narration = OUTPUT / "narration.wav"
     make_narration(script_file, narration)
 
-    video = output / "playblox_video.mp4"
+    images = []
+    for index, prompt in enumerate(prompts, start=1):
+        destination = OUTPUT / f"scene_{index}.png"
+        generate_image(prompt, destination, token)
+        images.append(destination)
 
-    # Moving shapes create an animated gaming-style background.
-    visual_filter = (
-        "drawbox=x='100+100*sin(t*0.7)':y=220:"
-        "w=420:h=8:color=0x00d9ff@0.9:t=fill,"
-        "drawbox=x='1100+150*sin(t*0.5)':y=720:"
-        "w=500:h=8:color=0xff00aa@0.8:t=fill,"
-        "drawbox=x='700+200*cos(t*0.4)':y=470:"
-        "w=260:h=260:color=0x263d70@0.5:t=5,"
-        "drawtext=text='PLAYBLOX GAMING':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=white:fontsize=72:"
-        "x=(w-text_w)/2:y=100:"
-        "shadowcolor=black:shadowx=3:shadowy=3,"
-        "drawtext=text='YOUR NEXT GAMING ADVENTURE':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=0x00d9ff:fontsize=38:"
-        "x=(w-text_w)/2:y=205:"
-        "enable='between(t\\,0\\,15)',"
-        "drawtext=text='MISSION STARTED':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=yellow:fontsize=60:"
-        "x=(w-text_w)/2:y=480:"
-        "enable='between(t\\,0\\,10)',"
-        "drawtext=text='TIME TO LEVEL UP!':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=white:fontsize=56:"
-        "x=(w-text_w)/2:y=480:"
-        "enable='between(t\\,45\\,55)',"
-        "drawtext=text='NEW CHALLENGE UNLOCKED':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=0x00d9ff:fontsize=52:"
-        "x=(w-text_w)/2:y=480:"
-        "enable='between(t\\,100\\,112)',"
-        "drawtext=text='NEVER GIVE UP!':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=yellow:fontsize=64:"
-        "x=(w-text_w)/2:y=480:"
-        "enable='between(t\\,170\\,182)',"
-        "drawtext=text='SUBSCRIBE FOR MORE!':"
-        "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "fontcolor=white:fontsize=52:"
-        "x=(w-text_w)/2:y=h-150:"
-        "enable='between(t\\,240\\,255)'"
+    # Create gently animated scenes. These are animated still images,
+    # not AI-generated moving footage.
+    scene_seconds = 40
+    frames = scene_seconds * FPS
+    filters = []
+
+    for index in range(4):
+        filters.append(
+            f"[{index}:v]"
+            f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+            f"crop={WIDTH}:{HEIGHT},"
+            f"zoompan=z='min(zoom+0.0003,1.12)':"
+            f"x='iw/2-(iw/zoom/2)':"
+            f"y='ih/2-(ih/zoom/2)':"
+            f"d={frames}:s={WIDTH}x{HEIGHT}:fps={FPS},"
+            f"setsar=1,format=yuv420p[v{index}]"
+        )
+
+    inputs = []
+    for image_path in images:
+        inputs.extend(["-loop", "1", "-framerate", str(FPS),
+                       "-i", str(image_path)])
+
+    filters.append(
+        "".join(f"[v{i}]" for i in range(4))
+        + "concat=n=4:v=1:a=0[vout]"
     )
 
-    # The background runs until the narration finishes.
+    video = OUTPUT / "playblox_video.mp4"
+
     run([
         "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", "color=c=0x10152b:s=1920x1080:r=30:d=900",
+        *inputs,
         "-i", str(narration),
-        "-vf", visual_filter,
-        "-map", "0:v:0",
-        "-map", "1:a:0",
+        "-filter_complex", ";".join(filters),
+        "-map", "[vout]",
+        "-map", "4:a:0",
         "-c:v", "libx264",
         "-preset", "veryfast",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
-        "-b:a", "192k",
+        "-b:a", "160k",
         "-shortest",
         "-movflags", "+faststart",
-        str(video)
+        str(video),
     ])
 
     print(f"Video created: {video}")
@@ -171,8 +216,8 @@ def create_video(topic):
 
 if __name__ == "__main__":
     topic = (
-        " ".join(sys.argv[1:])
+        " ".join(sys.argv[1:]).strip()
         if len(sys.argv) > 1
-        else "Minecraft survival adventure"
+        else "a tiny dragon who discovers a hidden candy kingdom"
     )
     create_video(topic)
