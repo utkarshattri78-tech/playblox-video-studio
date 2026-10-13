@@ -60,21 +60,20 @@ def generate_image(prompt, destination, token):
                 )
 
             destination.write_bytes(image_data)
-            print(f"Created cartoon scene: {destination.name}")
+            print(f"Created AI image: {destination.name}")
             return
 
         except urllib.error.HTTPError as error:
             details = error.read().decode("utf-8", errors="replace")
+
             if error.code == 503 and attempt < 2:
-                print("The model is loading. Waiting before retrying...")
+                print("The image model is loading. Retrying shortly...")
                 time.sleep(20)
                 continue
 
             raise RuntimeError(
-                f"Hugging Face image generation failed (HTTP {error.code}). "
-                "The model may be unavailable or your free allowance may "
-                "be exhausted. No paid fallback will be used. "
-                f"Service message: {details[:500]}"
+                f"Hugging Face image generation failed (HTTP {error.code}): "
+                f"{details[:500]}"
             ) from None
 
         except urllib.error.URLError as error:
@@ -83,13 +82,41 @@ def generate_image(prompt, destination, token):
             ) from None
 
 
+def create_fallback_image(destination, scene_number, topic):
+    """Create a colourful scene locally without using paid image services."""
+    colours = [
+        ("#182848", "#4b6cb7"),
+        ("#42275a", "#734b6d"),
+        ("#134e5e", "#71b280"),
+        ("#642b73", "#c6426e"),
+    ]
+
+    start, end = colours[(scene_number - 1) % len(colours)]
+
+    # Use FFmpeg to create a gradient background and simple decorative shapes.
+    # Escape colour values for FFmpeg's filter syntax.
+    filter_text = (
+        f"gradients=s={WIDTH}x{HEIGHT}:"
+        f"c0={start}:c1={end}:"
+        "x0=0:y0=0:x1=1920:y1=1080"
+    )
+
+    run([
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", filter_text,
+        "-frames:v", "1",
+        str(destination),
+    ])
+
+    print(
+        f"Created fallback background for scene {scene_number}. "
+        "This is a gradient, not an AI cartoon image."
+    )
+
+
 def create_video(topic):
     token = os.environ.get("HF_TOKEN")
-    if not token:
-        raise RuntimeError(
-            "HF_TOKEN is missing. Check your GitHub Actions repository secret."
-        )
-
     OUTPUT.mkdir(exist_ok=True)
 
     story = [
@@ -159,13 +186,25 @@ def create_video(topic):
     make_narration(script_file, narration)
 
     images = []
+
     for index, prompt in enumerate(prompts, start=1):
         destination = OUTPUT / f"scene_{index}.png"
-        generate_image(prompt, destination, token)
+
+        if token:
+            try:
+                generate_image(prompt, destination, token)
+            except (RuntimeError, urllib.error.URLError) as error:
+                print(f"AI image unavailable: {error}")
+                print("Switching to the local no-credit fallback.")
+                create_fallback_image(destination, index, topic)
+        else:
+            print("HF_TOKEN is missing. Using local fallback.")
+            create_fallback_image(destination, index, topic)
+
         images.append(destination)
 
-    # Create gently animated scenes. These are animated still images,
-    # not AI-generated moving footage.
+    # Animate the still images with a gentle zoom effect.
+    # These are animated stills, not AI-generated moving footage.
     scene_seconds = 40
     frames = scene_seconds * FPS
     filters = []
@@ -183,9 +222,13 @@ def create_video(topic):
         )
 
     inputs = []
+
     for image_path in images:
-        inputs.extend(["-loop", "1", "-framerate", str(FPS),
-                       "-i", str(image_path)])
+        inputs.extend([
+            "-loop", "1",
+            "-framerate", str(FPS),
+            "-i", str(image_path),
+        ])
 
     filters.append(
         "".join(f"[v{i}]" for i in range(4))
