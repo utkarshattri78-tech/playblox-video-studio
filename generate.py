@@ -68,4 +68,3 @@ def create_video(topic):
 if __name__ == "__main__":
     topic = sys.argv[1] if len(sys.argv) > 1 else "Minecraft survival adventure"
     create_video(topic)
-```
