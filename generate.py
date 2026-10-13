@@ -1,8 +1,7 @@
-import asyncio
 import subprocess
 import sys
 from pathlib import Path
-import edge_tts
+from gtts import gTTS
 
 WIDTH, HEIGHT, FPS, DURATION = 1920, 1080, 30, 30
 VOICE = "en-US-GuyNeural"
@@ -10,14 +9,9 @@ VOICE = "en-US-GuyNeural"
 def run(command):
     subprocess.run(command, check=True)
 
-async def make_narration(text, output_file):
-    speech = edge_tts.Communicate(
-        text,
-        VOICE,
-        rate="+5%",
-        pitch="+0Hz"
-    )
-    await speech.save(str(output_file))
+def make_narration(text, output_file):
+    speech = gTTS(text=text, lang="en", tld="com.au")
+    speech.save(str(output_file))
 
 def create_video(topic):
     output = Path("output")
@@ -36,7 +30,7 @@ def create_video(topic):
     )
 
     narration = output / "narration.mp3"
-    asyncio.run(make_narration(" ".join(script), narration))
+    VOICE = "en-US-GuyNeural"
 
     video = output / "playblox_video.mp4"
 
