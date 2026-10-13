@@ -10,7 +10,7 @@ from pathlib import Path
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 30
 OUTPUT = Path("output")
-HF_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
+HF_MODEL = "stabilityai/stable-diffusion-3-medium-diffusers"
 HF_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}"
 
 
