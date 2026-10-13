@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg espeak-ng
-          pip install gTTS
+          pip install gTTS kokoro-tts
           
       - name: Generate video
         run: |
